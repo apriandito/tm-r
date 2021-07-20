@@ -2,3 +2,129 @@
 title: "Topic Modelling"
 author: "Muhammad Apriandito"
 ---
+
+# Set Seed
+```{r}
+# Set Seed
+set.seed(1234)
+```
+
+# Load Library
+```{r}
+# Load Library
+library(stm)
+library(tidyverse)
+library(tidytext)
+library(textclean)
+library(scales)
+library(hrbrthemes)
+```
+
+# Load Data
+```{r}
+# Load Library
+df <- read_rds("data/tweet-gojek.rds")
+```
+
+```{r}
+# Menampilkan Keseluruhan Data
+print(df)
+```
+
+```{r}
+# Menampilkan rangkuman data
+glimpse(df)
+```
+
+# Filter Data
+```{r}
+# Filter data agar tidak terlalu besar
+df_filter <- df %>%
+  mutate(created_at = as_date(created_at)) %>%
+  filter(created_at >= dmy("18-07-2021"))
+```
+
+```{r}
+# Menampilkan rangkuman data setelah difilter
+glimpse(df_filter)
+```
+
+# Data Preprocessing
+```{r}
+# Process the data
+df_clean <- df_filter %>%
+  select(text) %>%
+  mutate(text = strip(text)) %>%
+  mutate(text = replace_emoji(text)) %>%
+  mutate(text = replace_html(text, symbol = FALSE)) %>%
+  mutate(text = replace_hash(text, pattern = "#([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_tag(text, pattern = "@([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_url(text,  pattern = qdapRegex::grab("rm_url"), replacement = ""))
+```
+
+```{r}
+# Import Stopword
+stop_words <- read_csv("data/stopword-id.txt", col_names = "word")
+```
+
+```{r}
+# Tokenize
+df_text <- df_clean %>%
+  rowid_to_column("id") %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  group_by(id, word) %>%
+  count()
+```
+
+```{r}
+# Membuat Document Matrix
+dfm <- df_text %>%
+  cast_dfm(document = id, term = word, value = n)
+```
+
+# Topic Modelling
+```{r}
+# Mengindetifikasi Topik menggunakan LDA
+lda <- stm(dfm,
+  K = 2,
+  verbose = FALSE,
+  init.type = "LDA"
+)
+```
+```{r}
+# Melihat Topik
+topik <- tidy(lda, matrix = "beta")
+```
+
+```{r}
+# Memvisualisasikan Kata Pada Masing-Masing Topik
+visualisasi_topik <- topik %>%
+  group_by(topic) %>%
+  top_n(6, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(beta, term, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  labs(
+    title = "Kata Kunci Pada Masing-Masing Topik"
+  ) +
+  facet_wrap(~topic, scales = "free") +
+  scale_y_reordered() +
+  theme_ipsum()
+```
+
+```{r}
+# Save Plot
+ggsave(visualisasi_topik ,
+  filename = "plot/topic-modeling.png",
+  width = 20,
+  height = 20,
+  dpi = 300,
+  type = "cairo",
+  units = "cm",
+  limitsize = FALSE
+)
+```
+

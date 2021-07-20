@@ -15,11 +15,11 @@ library(textclean)
 # Load Data
 df <- read_csv("data/spam.csv")
 ```
+
 ```{r}
 # Check Data
 glimpse(df)
 ```
-
 
 ```{r}
 # Process the data

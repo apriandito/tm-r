@@ -2,3 +2,136 @@
 title: "Sentiment Analysis"
 author: "Muhammad Apriandito"
 ---
+
+# Set Seed
+```{r}
+# Set Seed
+set.seed(1234)
+```
+
+# Load Library
+```{r}
+# Load library
+library(tidyverse)
+library(tidymodels)
+library(textrecipes)
+library(textclean)
+library(discrim)
+library(naivebayes)
+```
+
+# Load Data
+```{r message=FALSE, warning=FALSE}
+# Load Data
+df <- read_csv("data/gojek-sentiment.csv")
+```
+
+```{r}
+# Menampilkan keseluruhan data
+print(df)
+```
+
+```{r}
+# Menampilkan Rangkuman Data
+glimpse(df)
+```
+
+# Data Preprocessing
+```{r}
+# Data Cleaning
+df_clean <- df %>%
+  select(text, sentiment) %>%
+  mutate(sentiment = as.factor(sentiment)) %>%
+  mutate(text = strip(text)) %>%
+  mutate(text = replace_emoji(text)) %>%
+  mutate(text = replace_html(text)) %>%
+  mutate(text = replace_hash(text, pattern = "#([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_tag(text, pattern = "@([A-Za-z0-9_]+)", replacement = ""))
+```
+
+```{r}
+# Menampilkan data setelah di cleaning
+print(df_clean)
+```
+
+# Split Data
+```{r}
+# Split Data
+df_split <- df_clean %>%
+  initial_split(test = 0.70)
+```
+
+```{r}
+# Menampikan Data Training
+df_training <- df_split %>%
+  training()
+
+df_training
+```
+
+```{r}
+# Menampilkan Data Testing
+df_testing <- df_split %>%
+  testing
+
+df_testing
+```
+
+# Membuat Alur Pemrosesan Data
+```{r}
+# Membuat Alur Pemrosesan data
+df_recipe <- df_training %>%
+  recipe(sentiment ~.) %>%
+  step_tokenize(text) %>%
+  step_tfidf(text) %>%
+  step_downsample(sentiment)
+```
+
+# Menentukan Model
+```{r}
+# Menentukan Model (Naive Bayes)
+nb <-  naive_Bayes() %>% 
+  set_engine("naivebayes") %>% 
+  translate()
+```
+
+```{r}
+# Menjadikan Workflow
+workflow <- workflow() %>%
+  add_recipe(df_recipe) %>%
+  add_model(rf)
+```
+
+# Training Model
+
+```{r}
+# Training Model
+model <- fit(workflow, df_training)
+```
+
+# Evaluasi Model
+```{r}
+# Menentukan metrik evaluasi untuk mengukur performa model
+multi_metrics <- metric_set(accuracy, precision, recall, specificity)
+```
+
+```{r}
+# Melihat performa model
+model %>%
+  predict(df_testing) %>%
+  bind_cols(df_testing) %>%
+  multi_metrics(truth = sentiment, estimate = .pred_class)
+```
+
+# Melakukan deteksi sentiment ke data baru
+```{r}
+# Membuat Data Sentiment Baru
+tweet_baru <- tibble(text = "Abang drivernya baik Banget")
+```
+
+```{r}
+# Deteksi Sentiment
+model %>%
+  predict(tweet_baru)
+```
+

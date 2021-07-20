@@ -3,3 +3,122 @@ title: "Text Network Analysis"
 author: "Muhammad Apriandito"
 ---
 
+# Set Seed
+```{r}
+# Set Seed
+set.seed(1234)
+```
+
+# Load Library
+```{r}
+# Load Library
+library(tidyverse)
+library(tidytext)
+library(textclean)
+library(scales)
+library(hrbrthemes)
+library(tidygraph)
+library(ggraph)
+library(widyr)
+library(lubridate)
+```
+
+# Load Data
+```{r}
+# Load library
+df <- read_rds("data/tweet-gojek.rds")
+```
+
+# Filter Data
+```{r}
+# Filter data agar tidak terlalu besar
+df_filter <- df %>%
+  mutate(created_at = as_date(created_at)) %>%
+  filter(created_at >= dmy("18-07-2021"))
+```
+
+# Data Preprocessing
+```{r}
+# Data Cleaning
+df_clean <- df_filter %>%
+  select(text) %>%
+  mutate(text = strip(text)) %>%
+  mutate(text = replace_emoji(text)) %>%
+  mutate(text = replace_html(text, symbol = FALSE)) %>%
+  mutate(text = replace_hash(text, pattern = "#([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_tag(text, pattern = "@([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_url(text,  pattern = qdapRegex::grab("rm_url"), replacement = ""))
+```
+
+```{r message=FALSE, warning=FALSE}
+# Import Stopword
+stop_words <- read_csv("data/stopword-id.txt", col_names = "word")
+```
+
+```{r}
+# Membuat Edgelist
+edgelist <- df_clean %>%
+  rowid_to_column("id") %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words, by = "word") %>%
+  pairwise_count(word, id, sort = TRUE) %>%
+  rename(from = item1, to = item2) %>%
+  filter(n > 2)
+```
+
+
+# Membuat Graph
+```{r}
+# Membuat Graph
+graph <- as_tbl_graph(edgelist,
+                  directed = FALSE, 
+                  node_key = name) %>%
+  mutate(degree_centrality = centrality_degree()) %>%
+  mutate(connected_component = group_components()) %>%
+  mutate(modularity = group_louvain()) 
+```
+
+# Memvisualisasikan Graph
+```{r}
+# Visualisasi TNA
+visualisasi_tna <- graph %>%
+  filter(degree_centrality > 50) %>%
+  filter(connected_component == 1) %>%
+  ggraph(layout = "graphopt") +
+  geom_edge_link2(aes(edge_colour = as.factor(node.modularity)),
+                  edge_width = 0.2, 
+                  edge_alpha = 0.4) +
+  geom_node_point(aes(
+    colour = as.factor(modularity),
+    size = degree_centrality,
+    alpha = 0.8
+  ), position = "identity") +
+  geom_node_text(aes(size = degree_centrality,
+    label = name
+  ),
+  alpha = 0.8,
+  check_overlap = F,
+  repel = F
+  ) +
+  scale_size(range = c(4, 8)) +
+  labs(
+    x = "", y = ""
+  ) +
+  theme_ipsum(grid = FALSE, axis_text_size = 0) +
+  theme(legend.position = "none")
+```
+
+# Menyimpan Visualisasi Graph
+```{r message=FALSE, warning=FALSE}
+# Simpan Graph
+ggsave(visualisasi_tna,
+  filename = "plot/tna.png",
+  width = 20,
+  height = 20,
+  dpi = 300,
+  type = "cairo",
+  units = "cm",
+  limitsize = FALSE
+)
+```
+
