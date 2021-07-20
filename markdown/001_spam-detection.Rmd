@@ -8,11 +8,84 @@ author: "Muhammad Apriandito"
 library(tidyverse)
 library(tidymodels)
 library(textrecipes)
+library(textclean)
 ```
 
 ```{r}
 # Load Data
 df <- read_csv("data/spam.csv")
 ```
+```{r}
+# Check Data
+glimpse(df)
+```
 
+
+```{r}
+# Process the data
+df_clean <- df%>%
+  mutate(label = as.factor(label)) %>%
+  mutate(text = strip(text)) %>%
+  mutate(text = replace_emoji(text)) %>%
+  mutate(text = replace_html(text)) %>%
+  mutate(text = replace_hash(text, pattern = "#([A-Za-z0-9_]+)", replacement = "")) %>%
+  mutate(text = replace_tag(text, pattern = "@([A-Za-z0-9_]+)", replacement = ""))
+```
+
+```{r}
+# Split Data
+df_split <- df_clean %>%
+  initial_split(test = 0.70)
+```
+
+```{r}
+# Training Data
+df_training <- df_split %>%
+  training()
+
+# Split Data
+df_testing <- df_split %>%
+  testing
+```
+
+```{r}
+# Membuat Recipe
+df_recipe <- df_training %>%
+  recipe(label ~.) %>%
+  step_tokenize(text) %>%
+  step_tfidf(text)
+```
+
+```{r}
+# Menentukan Model
+rf <-  rand_forest() %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification") %>% 
+  translate()
+```
+
+```{r}
+# Menjadikan Workflow
+workflow <- workflow() %>%
+  add_recipe(df_recipe) %>%
+  add_model(rf)
+```
+
+```{r}
+# Training Model
+model <- fit(workflow, df_training)
+```
+
+```{r}
+# Menentukan metrik evaluasi untuk mengukur performa model
+multi_metrics <- metric_set(accuracy, precision, recall, specificity)
+```
+
+```{r}
+# Melihat performa model
+model %>%
+  predict(df_testing) %>%
+  bind_cols(df_testing) %>%
+  multi_metrics(truth = label, estimate = .pred_class)
+```
 
